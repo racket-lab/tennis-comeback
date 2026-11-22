@@ -271,6 +271,19 @@ select{min-height:44px;border:1px solid var(--line);border-radius:10px;backgroun
 .block.complete{background:color-mix(in srgb,var(--ok) 7%,var(--surface))}
 .block.complete .bprog{background:var(--ok);color:var(--accent-ink);padding:3px 10px;border-radius:999px}
 @media (max-width:420px){.cd{min-height:50px}.cd .dn{font-size:11px}.wrow{gap:3px}}
+fieldset.lockable{border:0;margin:0;padding:0;min-width:0;display:flex;flex-direction:column;gap:14px}
+.daybody{gap:16px}
+fieldset.lockable:disabled .yn button,fieldset.lockable:disabled .pain button,fieldset.lockable:disabled .chk,fieldset.lockable:disabled .sbtn,fieldset.lockable:disabled .linkbtn{cursor:default}
+fieldset.lockable:disabled input,fieldset.lockable:disabled textarea{background:var(--surface-2);color:var(--ink);opacity:1}
+fieldset.lockable:disabled .sbtn,fieldset.lockable:disabled .linkbtn{display:none}
+.lockrow{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding-top:12px;margin-top:2px;border-top:1px solid var(--line)}
+.lockbtn{min-height:44px;padding:6px 16px;border-radius:12px;border:1.5px solid var(--ink);background:var(--surface);font-weight:700;display:inline-flex;align-items:center;gap:8px}
+.lockbtn:hover{background:var(--surface-2)}
+.lockrow.is-locked .lockbtn{background:var(--ink);color:var(--bg)}
+.lockhint{font-size:13px;color:var(--muted)}
+.cd .lk{display:inline-block;width:7px;height:6px;margin-left:3px;border-radius:1px;background:currentColor;vertical-align:0;position:relative}
+.cd .lk::before{content:"";position:absolute;left:1px;top:-4px;width:3px;height:4px;border:1.5px solid currentColor;border-bottom:0;border-radius:3px 3px 0 0}
+.cd .mk{color:var(--muted)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 
@@ -541,7 +554,9 @@ const I={
   regeln:'<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>',
   check:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>',
   left:'<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>',
-  right:'<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>'
+  right:'<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>',
+  lock:'<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
+  unlock:'<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>'
 };
 const NAV=[['heute','Heute'],['plan','Plan'],['fortschritt','Fortschritt'],['regeln','Regeln']];
 
@@ -576,13 +591,15 @@ function viewDay(k){const day=DMAP[k],lg=getLog(k),w=WEEKS[day.week-1],d=dateOf(
   const hint=pv==null?'0 = kein Schmerz · bis 3 ist okay, wenn es am nächsten Morgen wieder normal ist':
     pv<=3?'Im grünen Bereich.':`Über 3: Ist es morgen früh nicht wieder normal, gehst du einen Schritt zurück.`;
   const wk=isWorkout(day);
-  const status=`<section class="card pad status" aria-label="Tagesstatus">
+  const L=!!lg.locked;const canLock=L||!!lg.status||!wk;
+  const lockrow=canLock?`<div class="lockrow${L?' is-locked':''}"><button class="lockbtn" data-act="lock" aria-pressed="${L}">${L?I.lock+' Abgeschlossen':I.unlock+' Tag abschließen'}</button><span class="lockhint">${L?'Nichts mehr änderbar. Zum Bearbeiten nochmal tippen.':'Danach kannst du an diesem Tag nichts mehr ändern.'}</span></div>`:'';
+  const status=`<section class="card pad status" aria-label="Tagesstatus"><fieldset class="lockable" ${L?'disabled':''}>
     ${wk?`<div class="qrow"><div class="qlab"><span>Training gemacht?</span></div>
       <div class="yn"><button data-act="status" data-v="ja" aria-pressed="${lg.status==='ja'}">${I.check.replace('<svg','<svg class="ico" style="stroke-width:3"')} Ja</button><button data-act="status" data-v="nein" aria-pressed="${lg.status==='nein'}">Nein</button></div></div>`:`<div class="qrow"><div class="qlab"><span>Heute kein Workout</span></div><div class="painhint">Nur Mobility und Gehen, ohne Abhaken.</div></div>`}
     <div class="qrow"><div class="qlab"><span>Schmerz im unteren Rücken</span><span class="muted num" style="font-weight:500">${pv==null?'–':pv+' / 10'}</span></div>
       <div class="pain" role="group" aria-label="Schmerz von 0 bis 10">${pain}</div>
       <div class="painhint${pv!=null&&pv>3?' r':''}">${hint}</div></div>
-  </section>`;
+  </fieldset>${lockrow}</section>`;
   // Blöcke
   const blocks=day.blocks.map((bk,bi)=>{const b=B[bk];const items=day.items[bi];
     if(b.info)return `<section class="card block info"><div class="bh"><div><h2>${b.t}</h2>${b.s?`<div class="bsub">${b.s}</div>`:''}</div><span class="chip">Ohne Abhaken</span></div>
@@ -595,7 +612,7 @@ function viewDay(k){const day=DMAP[k],lg=getLog(k),w=WEEKS[day.week-1],d=dateOf(
     <div class="dhead"><div class="eyebrow">Woche ${Math.min(day.week,5)}${day.week<6?' von 5':''} · ${w.title}</div>
       <h1>${WDL[d.getDay()]}, ${d.getDate()}. ${MON[d.getMonth()]}</h1>
       <div class="dmeta"><span class="wk">${esc(day.label)}</span>${chips.join('')}</div></div>
-    ${notes}${status}${blocks}${note}</div></div>`}
+    ${notes}${status}<fieldset class="lockable daybody" ${L?'disabled':''}>${blocks}${note}</fieldset></div></div>`}
 
 /* ---------- Kalender aller Tage ---------- */
 const BCAT={core1:'core',core2:'core',core3:'core',core4:'core',gym1:'gym',gym2:'gym',gym3:'gym',gym4:'gym',gym5:'gym',
@@ -610,7 +627,7 @@ function calendar(sel){const tk=todayKey();
     const cls=['cd','st-'+st];if(d.key===sel)cls.push('sel');if(d.key===tk)cls.push('is-today');
     const mark=st==='ok'?'✓':st==='miss'?'✕':'';
     const aria=`${WDL[dd.getDay()]} ${dd.getDate()}. ${MON[dd.getMonth()]}: ${d.label}${st==='ok'?', geschafft':st==='miss'?', nicht geschafft':''}${d.key===tk?', heute':''}`;
-    return `<button class="${cls.join(' ')}" data-act="goto" data-day="${d.key}" ${d.key===sel?'aria-current="date"':''} aria-label="${esc(aria)}"><span class="wd">${d.key===tk?'Heute':WD[dd.getDay()]}</span><span class="dn">${dd.getDate()}.${dd.getMonth()+1}.</span><span class="mk" aria-hidden="true">${mark}</span></button>`};
+    return `<button class="${cls.join(' ')}" data-act="goto" data-day="${d.key}" ${d.key===sel?'aria-current="date"':''} aria-label="${esc(aria)}"><span class="wd">${d.key===tk?'Heute':WD[dd.getDay()]}</span><span class="dn">${dd.getDate()}.${dd.getMonth()+1}.</span><span class="mk" aria-hidden="true">${mark}${lg.locked?'<i class="lk"></i>':''}</span></button>`};
   const weeks=WEEKS.map((w,wi)=>{const ds=DAYS.filter(d=>d.week===wi+1);
     if(wi===5){const d=ds[0];return `<div class="wgoal">${cell(d).replace('class="cd','class="cd goalcell')}<div><div class="eyebrow">Ziel</div><b>Montag, 28. Dezember: wieder Tennis</b></div></div>`}
     return `<div class="wblock"><div class="wlab"><b>Woche ${wi+1}</b> <span>${esc(w.title)}</span></div><div class="wrow" style="grid-template-columns:repeat(${ds.length},minmax(0,1fr))">${ds.map(cell).join('')}</div></div>`}).join('');
@@ -779,6 +796,8 @@ main.addEventListener('click',ev=>{const b=ev.target.closest('[data-act]');if(!b
   if(a==='metric'){selMetric=b.dataset.v;render();return}
   if(a==='focus'){selFocus=b.dataset.v;render();return}
   const dk=curDay();if(!dk)return;const lg=ensureLog(dk);
+  if(a==='lock'){lg.locked=!lg.locked;if(!lg.locked)delete lg.locked;touch(dk);render();const lb=main.querySelector('[data-act="lock"]');if(lb)lb.focus({preventScroll:true});return}
+  if(lg.locked)return;
   if(a==='status'){lg.status=lg.status===b.dataset.v?null:b.dataset.v;touch(dk);render()}
   else if(a==='pain'){const v=+b.dataset.v;lg.pain=lg.pain===v?null:v;touch(dk);render()}
   else if(a==='toggle'){const k=b.dataset.k;const it=DMAP[dk].items.flat().find(x=>x.k===k);const x=lg.ex[k]||(lg.ex[k]={});x.done=!exDone(EX[it.id],x);touch(dk);refreshEx(dk,k)}
@@ -787,7 +806,7 @@ main.addEventListener('click',ev=>{const b=ev.target.closest('[data-act]');if(!b
     const nb=main.querySelector(`[data-act="${a}"][data-k="${CSS.escape(k)}"]`);if(nb&&!nb.disabled)nb.focus({preventScroll:true})}
   else if(a==='copy'){const k=b.dataset.k;const last=lastFor(b.dataset.id,dk);if(!last)return;const x=lg.ex[k]||(lg.ex[k]={});x.sets=last.sets.map(s=>Object.assign({},s||{}));const it=DMAP[dk].items.flat().find(q=>q.k===k);if(x.sets.length!==setsCount(it))x.n=x.sets.length;else delete x.n;touch(dk);render()}
 });
-main.addEventListener('input',ev=>{const t=ev.target;const f=t.dataset&&t.dataset.f;if(!f||f==='exsel')return;const dk=curDay();if(!dk)return;const lg=ensureLog(dk);
+main.addEventListener('input',ev=>{const t=ev.target;const f=t.dataset&&t.dataset.f;if(!f||f==='exsel')return;const dk=curDay();if(!dk)return;const lg=ensureLog(dk);if(lg.locked)return;
   if(f==='note'){lg.note=t.value.slice(0,4000);touch(dk);return}
   const k=t.dataset.k;const x=lg.ex[k]||(lg.ex[k]={});
   if(f==='min'){x.min=t.value.replace(/[^\d.,]/g,'').slice(0,5)}
