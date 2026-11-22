@@ -284,6 +284,14 @@ fieldset.lockable:disabled .sbtn,fieldset.lockable:disabled .linkbtn{display:non
 .cd .lk{display:inline-block;width:7px;height:6px;margin-left:3px;border-radius:1px;background:currentColor;vertical-align:0;position:relative}
 .cd .lk::before{content:"";position:absolute;left:1px;top:-4px;width:3px;height:4px;border:1.5px solid currentColor;border-bottom:0;border-radius:3px 3px 0 0}
 .cd .mk{color:var(--muted)}
+a.sync{text-decoration:none;color:var(--muted);border-radius:8px;padding:6px 4px}
+a.sync:hover{color:var(--ink)}
+.steps{margin:0 0 14px;padding-left:20px;display:flex;flex-direction:column;gap:8px}
+.gform{display:flex;flex-direction:column;gap:8px;align-items:flex-start;margin-bottom:10px}
+.gform input{width:100%;max-width:420px;min-height:44px;border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:8px 12px;font-size:16px}
+.gform input:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 2px var(--accent-soft)}
+.note a,.rules a{color:var(--accent);font-weight:600}
+code{font-size:.9em;background:var(--surface-2);padding:1px 5px;border-radius:5px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 
@@ -297,7 +305,7 @@ fieldset.lockable:disabled .sbtn,fieldset.lockable:disabled .linkbtn{display:non
       </div>
     </div>
     <nav class="tabs" id="tabs" aria-label="Hauptnavigation"></nav>
-    <span class="sync" id="sync" data-s="loading" role="status" aria-live="polite">Lädt…</span>
+    <a class="sync" id="sync" href="#sync" data-s="loading" role="status" aria-live="polite">Lädt…</a>
   </div>
 </header>
 <main class="wrap" id="main" tabindex="-1"></main>
@@ -484,24 +492,24 @@ try{LOGS=JSON.parse(localStorage.getItem(LS)||'{}')||{}}catch(e){LOGS={}}
 function cacheLocal(){try{localStorage.setItem(LS,JSON.stringify(LOGS))}catch(e){}}
 function getLog(k){return LOGS[k]||{status:null,pain:null,note:'',ex:{}}}
 function ensureLog(k){if(!LOGS[k])LOGS[k]={status:null,pain:null,note:'',ex:{}};if(!LOGS[k].ex)LOGS[k].ex={};return LOGS[k]}
-let MODE='local', COL=null, deferRender=false;
+let MODE='init', COL=null, deferRender=false;
 const syncEl=document.getElementById('sync');
-function setSync(s){const t={loading:'Lädt…',saving:'Speichert…',saved:'Gespeichert',local:'Nur auf diesem Gerät',error:'Nicht gespeichert',offline:'Keine Verbindung'}[s];syncEl.dataset.s=s;syncEl.textContent=t;
+function setSync(s){const t={loading:'Lädt…',saving:'Synchronisiert…',saved:MODE==='gist'?'Synchronisiert':'Gespeichert',local:'Nur dieses Gerät',error:'Sync-Fehler',offline:'Keine Verbindung'}[s];syncEl.dataset.s=s;syncEl.textContent=t;
   syncEl.title=s==='local'?'Einträge bleiben nur in diesem Browser.':(s==='error'?'Speichern fehlgeschlagen. Die nächste Änderung versucht es erneut.':'')}
 const pending=new Set();let writing=false,wtimer=null;
-function touch(k){const l=ensureLog(k);l.updated=Date.now();cacheLocal();if(MODE!=='db'){return}pending.add(k);setSync('saving');clearTimeout(wtimer);wtimer=setTimeout(flush,700)}
+function touch(k){const l=ensureLog(k);l.updated=Date.now();cacheLocal();if(MODE==='gist'){gistQueue();return}if(MODE!=='db'){return}pending.add(k);setSync('saving');clearTimeout(wtimer);wtimer=setTimeout(flush,700)}
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function writeDoc(k){const data=JSON.parse(JSON.stringify(LOGS[k]));try{await COL.doc('d-'+k).set(data)}catch(e){if(e&&e.code==='unavailable'){await sleep(700+Math.random()*900);await COL.doc('d-'+k).set(data)}else throw e}}
 async function flush(){if(writing)return;writing=true;try{while(pending.size){const k=pending.values().next().value;pending.delete(k);try{await writeDoc(k)}catch(e){pending.add(k);setSync(e&&e.code==='quota_exceeded'?'error':'error');return}}setSync('saved')}finally{writing=false;if(pending.size&&syncEl.dataset.s!=='error'){clearTimeout(wtimer);wtimer=setTimeout(flush,700)}}}
 
 async function initDb(){
-  let tries=0;while(!(window.claude&&window.claude.use)&&tries<20){await sleep(100);tries++}
-  if(!(window.claude&&window.claude.use)){setSync('local');return}
+  let tries=0;const maxT=/github\.io$|localhost|127\.0\.0\.1/.test(location.hostname)?3:20;while(!(window.claude&&window.claude.use)&&tries<maxT){await sleep(100);tries++}
+  if(!(window.claude&&window.claude.use)){startGist();return}
   try{
     const [db,user]=await Promise.all([window.claude.use('db'),window.claude.use('user')]);
     const uid=user?await user.id():null;
     if(!db||!uid){setSync('local');return}
-    COL=db.collection('data/users/'+uid);MODE='db';
+    COL=db.collection('data/users/'+uid);MODE='db';safeRender();
     let first=true;const to=setTimeout(()=>{if(first)setSync('offline')},10000);
     COL.onSnapshot(snap=>{
       const remote={};
@@ -515,6 +523,41 @@ async function initDb(){
     },err=>{clearTimeout(to);MODE='local';setSync('local')});
   }catch(e){setSync('local')}
 }
+/* ---------- Sync über privates GitHub-Gist (für die GitHub-Pages-Version) ---------- */
+const GK='comeback-2812-sync',GFILE='comeback-2812-daten.json',GHAPI='https://api.github.com';
+function gcfg(){try{return JSON.parse(localStorage.getItem(GK)||'null')}catch(e){return null}}
+function gsave(c){try{if(c)localStorage.setItem(GK,JSON.stringify(c));else localStorage.removeItem(GK)}catch(e){}}
+let gBusy=false,gAgain=false,gTimer=null,gLastPull=0,gInfo='';
+async function ghReq(path,opt){opt=opt||{};const c=gcfg();
+  const r=await fetch(GHAPI+path,{method:opt.method||'GET',cache:'no-store',headers:Object.assign({'Accept':'application/vnd.github+json','Authorization':'Bearer '+c.token},opt.body?{'Content-Type':'application/json'}:{}),body:opt.body});
+  if(!r.ok){const e=new Error('HTTP '+r.status);e.status=r.status;throw e}return r.json()}
+async function gistFind(){for(let pg=1;pg<=10;pg++){const list=await ghReq('/gists?per_page=100&page='+pg);
+    const g=list.find(x=>x.files&&x.files[GFILE]);if(g)return g.id;if(list.length<100)break}
+  const g=await ghReq('/gists',{method:'POST',body:JSON.stringify({description:'Tennis-Comeback Trainingsdaten (automatisch)',public:false,files:{[GFILE]:{content:JSON.stringify({logs:{}})}}})});return g.id}
+function gMerge(remote){let changed=false,localNewer=false;
+  for(const k in remote){const r=remote[k],l=LOGS[k];if(!l||(r.updated||0)>(l.updated||0)){LOGS[k]=r;changed=true}}
+  for(const k in LOGS){const r=remote[k];if(!r||(LOGS[k].updated||0)>(r.updated||0))localNewer=true}
+  if(changed){cacheLocal();safeRender()}return localNewer}
+async function gistPull(){const c=gcfg();const g=await ghReq('/gists/'+c.id);const f=g.files&&g.files[GFILE];if(!f)throw new Error('Datei fehlt');
+  let txt=f.content;if(f.truncated){txt=await (await fetch(f.raw_url,{cache:'no-store'})).text()}
+  let data={};try{data=JSON.parse(txt||'{}')}catch(e){}gLastPull=Date.now();return gMerge(data.logs||{})}
+async function gistPush(){const c=gcfg();await ghReq('/gists/'+c.id,{method:'PATCH',body:JSON.stringify({files:{[GFILE]:{content:JSON.stringify({logs:LOGS,saved:new Date().toISOString()})}}})})}
+async function gistSync(push){if(gBusy){gAgain=gAgain||push;return}gBusy=true;setSync('saving');
+  try{const localNewer=await gistPull();if(push||localNewer)await gistPush();gInfo='';setSync('saved')}
+  catch(e){gInfo=e.status===401?'Der Schlüssel ist ungültig oder abgelaufen. Erstelle einen neuen und verbinde nochmal.':e.status===403||e.status===404?'Der Schlüssel darf keine Gists lesen oder schreiben. Beim Erstellen „gist“ anhaken.':'Keine Verbindung zu GitHub. Deine Einträge sind lokal gespeichert und werden später synchronisiert.';
+    setSync(e.status?'error':'offline')}
+  finally{gBusy=false;if(gAgain){gAgain=false;gistSync(true)}if(CUR==='sync')safeRender()}}
+function gistQueue(){setSync('saving');clearTimeout(gTimer);gTimer=setTimeout(()=>gistSync(true),1500)}
+function startGist(){const c=gcfg();if(!c||!c.token||!c.id){MODE='local';setSync('local');safeRender();return}MODE='gist';safeRender();gistSync(false)}
+async function gistConnect(token){gsave({token});setSync('saving');
+  try{const id=await gistFind();gsave({token,id});MODE='gist';await gistSync(true);return null}
+  catch(e){gsave(null);MODE='local';setSync('local');return e.status===401?'Der Schlüssel wurde nicht akzeptiert. Bitte prüfe, ob du ihn vollständig kopiert hast.':e.status===403||e.status===404?'Der Schlüssel hat keine Gist-Berechtigung. Beim Erstellen „gist“ anhaken.':'Keine Verbindung zu GitHub. Bitte später nochmal versuchen.'}}
+function gistDisconnect(){gsave(null);MODE='local';setSync('local')}
+function pullSoon(){if(MODE==='gist'&&!gBusy&&Date.now()-gLastPull>8000)gistSync(false)}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')pullSoon()});
+window.addEventListener('focus',pullSoon);
+window.addEventListener('online',()=>{if(MODE==='gist')gistSync(true)});
+
 function safeRender(){const a=document.activeElement;if(a&&main.contains(a)&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA')){deferRender=true;return}render()}
 document.addEventListener('focusout',()=>{setTimeout(()=>{if(deferRender){const a=document.activeElement;if(!(a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'))){deferRender=false;render()}}},0)});
 
@@ -565,7 +608,7 @@ const main=document.getElementById('main');
 let CUR=location.hash.slice(1);
 function route(){const h=CUR;
   if(h.startsWith('tag-')&&DMAP[h.slice(4)])return{v:'heute',day:h.slice(4)};
-  if(['plan','fortschritt','regeln'].includes(h))return{v:h};
+  if(['plan','fortschritt','regeln','sync'].includes(h))return{v:h};
   return{v:'heute',day:defaultDay()}}
 function go(h){CUR=h;try{if(location.hash.slice(1)!==h)history.pushState(null,'','#'+h)}catch(e){}render();main.focus({preventScroll:true})}
 window.addEventListener('popstate',()=>{CUR=location.hash.slice(1);render()});
@@ -582,6 +625,7 @@ function viewDay(k){const day=DMAP[k],lg=getLog(k),w=WEEKS[day.week-1],d=dateOf(
   const chips=[];if(k===tk)chips.push('<span class="chip today">Heute</span>');
   if(lg.status==='ja')chips.push('<span class="chip ok">Erledigt</span>');if(lg.status==='nein')chips.push('<span class="chip no">Nicht gemacht</span>');
   let notes='';
+  if(MODE==='local')notes+=`<div class="note"><b>Nur auf diesem Gerät gespeichert.</b> <a href="#sync">Sync einrichten</a>, damit Handy und Laptop dieselben Einträge sehen.</div>`;
   if(tk<FIRST&&k===FIRST)notes+=`<div class="note"><b>Start morgen.</b> Der Plan beginnt am Sonntag, 22. November.</div>`;
   if(day.week>1&&day.week<6&&d.getDay()===1)notes+=`<div class="note warn"><b>Neue Woche nur, wenn Woche ${day.week-1} weitgehend schmerzfrei lief.</b> Sonst Woche ${day.week-1} wiederholen, das Comeback verschiebt sich dann nach hinten.</div>`;
   if(day.note)notes+=`<div class="note">${esc(day.note)}</div>`;
@@ -747,6 +791,38 @@ function viewProgress(){const tk=todayKey();
     <div class="fxlist">${exCards}</div></section>`;
   return `<div class="dhead"><div class="eyebrow">Bis heute</div><h1>Fortschritt</h1></div>${tiles}${calCard}${painCard}${exCard}`}
 
+/* ---------- Ansicht: Synchronisieren ---------- */
+let syncMsg='';
+function viewSync(){
+  if(MODE==='db')return `<div class="dhead"><div class="eyebrow">Geräte</div><h1>Synchronisieren</h1></div>
+    <section class="card pad rules"><h2>Läuft automatisch</h2><p>In dieser Version werden deine Einträge in deinem Claude-Konto gespeichert. Auf jedem Gerät, auf dem du angemeldet bist, siehst du dieselben Daten.</p></section>`;
+  const c=gcfg();
+  if(MODE==='gist'&&c)return `<div class="dhead"><div class="eyebrow">Geräte</div><h1>Synchronisieren</h1></div>
+    <section class="card pad rules"><h2>Verbunden</h2>
+      <p>Deine Einträge werden in einem privaten Gist in deinem GitHub-Konto gespeichert. Nach jeder Änderung und beim Öffnen der Seite wird abgeglichen.</p>
+      <p class="muted" style="font-size:14px">Status: <b style="color:var(--ink)">${esc(syncEl.textContent)}</b></p>
+      ${gInfo?`<div class="note warn">${esc(gInfo)}</div>`:''}
+      <div class="setctl" style="margin-top:8px"><button class="lockbtn" data-act="gsync">Jetzt synchronisieren</button><button class="sbtn" data-act="gdisc">Auf diesem Gerät trennen</button></div>
+      <p class="muted" style="font-size:13px;margin-top:12px">Auf einem neuen Gerät: diese Seite öffnen, auf „Nur dieses Gerät“ oben rechts tippen und denselben Schlüssel einfügen.</p>
+    </section>`;
+  return `<div class="dhead"><div class="eyebrow">Geräte</div><h1>Synchronisieren</h1></div>
+    <section class="card pad rules"><h2>Warum siehst du deine Einträge nicht überall?</h2>
+      <p>Ohne Sync bleiben deine Einträge nur im Browser des Geräts, auf dem du sie gemacht hast. Mit einem GitHub-Schlüssel speichert die Seite sie in einem privaten Gist in deinem GitHub-Konto. Dann sehen Handy und Laptop dieselben Daten.</p></section>
+    <section class="card pad rules"><h2>Einmal einrichten</h2>
+      <ol class="steps">
+        <li>Öffne <a href="https://github.com/settings/tokens/new?scopes=gist&amp;description=Tennis-Comeback%20Sync" target="_blank" rel="noopener">github.com/settings/tokens/new</a> und melde dich an. Der Haken bei <b>gist</b> ist schon gesetzt. Bei „Expiration“ zum Beispiel „No expiration“ oder 90 Tage wählen.</li>
+        <li>Unten auf <b>Generate token</b> tippen und den Schlüssel (beginnt mit <code>ghp_</code>) kopieren. Am besten im Passwort-Manager speichern, GitHub zeigt ihn nur einmal.</li>
+        <li>Hier einfügen und auf <b>Verbinden</b> tippen. Auf jedem weiteren Gerät denselben Schlüssel einfügen.</li>
+      </ol>
+      <form id="gform" class="gform" autocomplete="off">
+        <label class="tl" for="gtoken">GitHub-Schlüssel</label>
+        <input id="gtoken" type="password" autocomplete="off" spellcheck="false" placeholder="ghp_…" aria-describedby="gerr">
+        <button class="lockbtn" type="submit">Verbinden</button>
+        <div id="gerr" class="painhint r" role="alert">${esc(syncMsg)}</div>
+      </form>
+      <p class="muted" style="font-size:13px">Der Schlüssel bleibt nur in diesem Browser gespeichert und darf ausschließlich Gists lesen und schreiben. Deine Einträge, die schon auf diesem Gerät sind, werden beim Verbinden mit hochgeladen.</p>
+    </section>`}
+
 /* ---------- Ansicht: Regeln ---------- */
 function viewRules(){return `<div class="dhead"><div class="eyebrow">Gilt die ganzen 5 Wochen</div><h1>Regeln</h1></div>
   <section class="card pad rules alert"><h2>Zum Arzt oder Physio, wenn …</h2><ul>
@@ -780,7 +856,7 @@ function viewRules(){return `<div class="dhead"><div class="eyebrow">Gilt die ga
 /* ---------- Render ---------- */
 let lastView=null;
 function render(){const r=route();renderNav(r.v);renderCountdown();main.classList.toggle('wide',r.v==='heute');
-  main.innerHTML=r.v==='heute'?viewDay(r.day):r.v==='plan'?viewPlan():r.v==='fortschritt'?viewProgress():viewRules();
+  main.innerHTML=r.v==='heute'?viewDay(r.day):r.v==='plan'?viewPlan():r.v==='fortschritt'?viewProgress():r.v==='sync'?viewSync():viewRules();
   const sig=r.v+(r.day||'');if(lastView!==null&&lastView!==sig){window.scrollTo(0,0)}lastView=sig}
 window.addEventListener('hashchange',()=>{CUR=location.hash.slice(1);render();main.focus({preventScroll:true})});
 
@@ -795,6 +871,8 @@ main.addEventListener('click',ev=>{const b=ev.target.closest('[data-act]');if(!b
   if(a==='goto'){if(b.dataset.day)go('tag-'+b.dataset.day);return}
   if(a==='metric'){selMetric=b.dataset.v;render();return}
   if(a==='focus'){selFocus=b.dataset.v;render();return}
+  if(a==='gsync'){gistSync(true);return}
+  if(a==='gdisc'){gistDisconnect();render();return}
   const dk=curDay();if(!dk)return;const lg=ensureLog(dk);
   if(a==='lock'){lg.locked=!lg.locked;if(!lg.locked)delete lg.locked;touch(dk);render();const lb=main.querySelector('[data-act="lock"]');if(lb)lb.focus({preventScroll:true});return}
   if(lg.locked)return;
@@ -813,6 +891,10 @@ main.addEventListener('input',ev=>{const t=ev.target;const f=t.dataset&&t.datase
   else{x.sets=x.sets||[];const i=+t.dataset.i;x.sets[i]=x.sets[i]||{};x.sets[i][f]=t.value.replace(/[^\d.,]/g,'').slice(0,6);for(let j=0;j<x.sets.length;j++)if(!x.sets[j])x.sets[j]={}}
   touch(dk);refreshEx(dk,k)});
 
+main.addEventListener('submit',async ev=>{if(ev.target.id!=='gform')return;ev.preventDefault();const inp=document.getElementById('gtoken');const tok=(inp.value||'').trim();
+  if(!tok){syncMsg='Bitte füge zuerst deinen Schlüssel ein.';render();return}
+  const btn=ev.target.querySelector('button');btn.disabled=true;btn.textContent='Verbinde…';
+  const err=await gistConnect(tok);syncMsg=err||'';if(!err)go('sync');else render()});
 render();
 initDb();
 </script>
