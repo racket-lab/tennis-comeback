@@ -294,6 +294,9 @@ fieldset.lockable:disabled .sbtn,fieldset.lockable:disabled .linkbtn{display:non
 .cd .mk{color:var(--muted)}
 a.sync{text-decoration:none;color:var(--muted);border-radius:8px;padding:6px 4px}
 a.sync:hover{color:var(--ink)}
+.qrbox{display:flex;flex-direction:column;align-items:flex-start;gap:8px;margin:10px 0}
+#qr{padding:12px;background:#FFFFFF;border-radius:12px;border:1px solid var(--line)}
+#qr img,#qr canvas{display:block;max-width:100%}
 .steps{margin:0 0 14px;padding-left:20px;display:flex;flex-direction:column;gap:8px}
 .gform{display:flex;flex-direction:column;gap:8px;align-items:flex-start;margin-bottom:10px}
 .gform input{width:100%;max-width:420px;min-height:44px;border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:8px 12px;font-size:16px}
@@ -805,22 +808,34 @@ function viewSync(){
   if(MODE==='db')return `<div class="dhead"><div class="eyebrow">Geräte</div><h1>Synchronisieren</h1></div>
     <section class="card pad rules"><h2>Läuft automatisch</h2><p>In dieser Version werden deine Einträge in deinem Claude-Konto gespeichert. Auf jedem Gerät, auf dem du angemeldet bist, siehst du dieselben Daten.</p></section>`;
   const c=gcfg();
+  const phoneSteps=`<ol class="steps">
+        <li>Öffne am Handy <b>racket-lab.github.io/tennis-comeback</b>.</li>
+        <li>Tippe oben rechts auf <b>„Nur dieses Gerät“</b>.</li>
+        <li>Füge denselben Schlüssel ein und tippe auf <b>Verbinden</b>. Was du am Handy schon eingetragen hast, wird dabei mit übernommen.</li>
+      </ol>`;
   if(MODE==='gist'&&c)return `<div class="dhead"><div class="eyebrow">Geräte</div><h1>Synchronisieren</h1></div>
-    <section class="card pad rules"><h2>Verbunden</h2>
-      <p>Deine Einträge werden in einem privaten Gist in deinem GitHub-Konto gespeichert. Nach jeder Änderung und beim Öffnen der Seite wird abgeglichen.</p>
+    <section class="card pad rules"><h2>Dieses Gerät ist verbunden</h2>
+      <p>Deine Einträge liegen in einem privaten Gist in deinem GitHub-Konto. Nach jeder Änderung und beim Öffnen der Seite wird abgeglichen.</p>
       <p class="muted" style="font-size:14px">Status: <b style="color:var(--ink)">${esc(syncEl.textContent)}</b></p>
       ${gInfo?`<div class="note warn">${esc(gInfo)}</div>`:''}
       <div class="setctl" style="margin-top:8px"><button class="lockbtn" data-act="gsync">Jetzt synchronisieren</button><button class="sbtn" data-act="gdisc">Auf diesem Gerät trennen</button></div>
-      <p class="muted" style="font-size:13px;margin-top:12px">Auf einem neuen Gerät: diese Seite öffnen, auf „Nur dieses Gerät“ oben rechts tippen und denselben Schlüssel einfügen.</p>
+    </section>
+    <section class="card pad rules"><h2>Handy verbinden</h2>
+      <p>Den Schlüssel bekommst du am einfachsten per QR-Code aufs Handy: Code anzeigen, mit der Handy-Kamera scannen, den angezeigten Text kopieren.</p>
+      <div class="setctl"><button class="sbtn" data-act="gqr">${qrShown?'QR-Code ausblenden':'QR-Code mit Schlüssel anzeigen'}</button></div>
+      ${qrShown?`<div class="qrbox"><div id="qr" aria-label="QR-Code mit deinem GitHub-Schlüssel"></div><p class="muted" style="font-size:13px">Nur dir selbst zeigen. Wer den Code scannt, kann deine Trainingsdaten lesen und ändern.</p></div>`:''}
+      ${phoneSteps}
     </section>`;
   return `<div class="dhead"><div class="eyebrow">Geräte</div><h1>Synchronisieren</h1></div>
     <section class="card pad rules"><h2>Warum siehst du deine Einträge nicht überall?</h2>
-      <p>Ohne Sync bleiben deine Einträge nur im Browser des Geräts, auf dem du sie gemacht hast. Mit einem GitHub-Schlüssel speichert die Seite sie in einem privaten Gist in deinem GitHub-Konto. Dann sehen Handy und Laptop dieselben Daten.</p></section>
-    <section class="card pad rules"><h2>Einmal einrichten</h2>
+      <p>Ohne Sync bleiben deine Einträge nur im Browser des Geräts, auf dem du sie gemacht hast. Mit einem GitHub-Schlüssel speichert die Seite sie in einem privaten Gist in deinem GitHub-Konto. Dann sehen Handy und Rechner dieselben Daten.</p></section>
+    <section class="card pad rules"><h2>Schritt 1: Am Rechner einrichten</h2>
       <ol class="steps">
-        <li>Öffne <a href="https://github.com/settings/tokens/new?scopes=gist&amp;description=Tennis-Comeback%20Sync" target="_blank" rel="noopener">github.com/settings/tokens/new</a> und melde dich an. Der Haken bei <b>gist</b> ist schon gesetzt. Bei „Expiration“ zum Beispiel „No expiration“ oder 90 Tage wählen.</li>
-        <li>Unten auf <b>Generate token</b> tippen und den Schlüssel (beginnt mit <code>ghp_</code>) kopieren. Am besten im Passwort-Manager speichern, GitHub zeigt ihn nur einmal.</li>
-        <li>Hier einfügen und auf <b>Verbinden</b> tippen. Auf jedem weiteren Gerät denselben Schlüssel einfügen.</li>
+        <li>Öffne diese Seite am Rechner: <b>racket-lab.github.io/tennis-comeback</b>, oben rechts auf <b>„Nur dieses Gerät“</b> klicken. Dann bist du hier.</li>
+        <li>Klicke auf <a href="https://github.com/settings/tokens/new?scopes=gist&amp;description=Tennis-Comeback%20Sync" target="_blank" rel="noopener">Schlüssel bei GitHub erstellen</a> und melde dich bei GitHub an. Der Name „Tennis-Comeback Sync“ und der Haken bei <b>gist</b> sind schon ausgefüllt.</li>
+        <li>Bei <b>Expiration</b> eine Laufzeit wählen, zum Beispiel 90 Tage. Ganz unten auf <b>Generate token</b> klicken.</li>
+        <li>Den Schlüssel (beginnt mit <code>ghp_</code>) mit dem Kopier-Symbol daneben kopieren. GitHub zeigt ihn nur einmal, also am besten auch im Passwort-Manager speichern.</li>
+        <li>Zurück in diesen Tab, unten einfügen und auf <b>Verbinden</b> klicken.</li>
       </ol>
       <form id="gform" class="gform" autocomplete="off">
         <label class="tl" for="gtoken">GitHub-Schlüssel</label>
@@ -828,8 +843,19 @@ function viewSync(){
         <button class="lockbtn" type="submit">Verbinden</button>
         <div id="gerr" class="painhint r" role="alert">${esc(syncMsg)}</div>
       </form>
-      <p class="muted" style="font-size:13px">Der Schlüssel bleibt nur in diesem Browser gespeichert und darf ausschließlich Gists lesen und schreiben. Deine Einträge, die schon auf diesem Gerät sind, werden beim Verbinden mit hochgeladen.</p>
+      <p class="muted" style="font-size:13px">Der Schlüssel bleibt nur in diesem Browser gespeichert und darf ausschließlich Gists lesen und schreiben.</p>
+    </section>
+    <section class="card pad rules"><h2>Schritt 2: Handy verbinden</h2>
+      <p>Nach dem Verbinden am Rechner zeigt dir diese Seite einen QR-Code mit dem Schlüssel. Den scannst du mit dem Handy, dann musst du nichts abtippen.</p>
+      ${phoneSteps}
     </section>`}
+
+let qrShown=false;
+function loadQr(){return new Promise((res,rej)=>{if(window.QRCode)return res();const sc=document.createElement('script');
+  sc.src='https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';sc.onload=()=>res();sc.onerror=rej;document.head.appendChild(sc)})}
+async function drawQr(){const el=document.getElementById('qr');const c=gcfg();if(!el||!c)return;
+  try{await loadQr();el.innerHTML='';new QRCode(el,{text:c.token,width:220,height:220,colorDark:'#15201A',colorLight:'#FFFFFF'})}
+  catch(e){el.textContent='QR-Code konnte nicht geladen werden. Kopiere den Schlüssel stattdessen aus deinem Passwort-Manager.'}}
 
 /* ---------- Ansicht: Regeln ---------- */
 function viewRules(){return `<div class="dhead"><div class="eyebrow">Gilt die ganzen 5 Wochen</div><h1>Regeln</h1></div>
@@ -865,6 +891,7 @@ function viewRules(){return `<div class="dhead"><div class="eyebrow">Gilt die ga
 let lastView=null;
 function render(){const r=route();renderNav(r.v);renderCountdown();main.classList.toggle('wide',r.v==='heute');
   main.innerHTML=r.v==='heute'?viewDay(r.day):r.v==='plan'?viewPlan():r.v==='fortschritt'?viewProgress():r.v==='sync'?viewSync():viewRules();
+  if(r.v==='sync'&&qrShown)drawQr();
   const sig=r.v+(r.day||'');if(lastView!==null&&lastView!==sig){window.scrollTo(0,0)}lastView=sig}
 window.addEventListener('hashchange',()=>{CUR=location.hash.slice(1);render();main.focus({preventScroll:true})});
 
@@ -880,7 +907,8 @@ main.addEventListener('click',ev=>{const b=ev.target.closest('[data-act]');if(!b
   if(a==='metric'){selMetric=b.dataset.v;render();return}
   if(a==='focus'){selFocus=b.dataset.v;render();return}
   if(a==='gsync'){gistSync(true);return}
-  if(a==='gdisc'){gistDisconnect();render();return}
+  if(a==='gdisc'){gistDisconnect();qrShown=false;render();return}
+  if(a==='gqr'){qrShown=!qrShown;render();if(qrShown)drawQr();return}
   const dk=curDay();if(!dk)return;const lg=ensureLog(dk);
   if(a==='lock'){lg.locked=!lg.locked;if(!lg.locked)delete lg.locked;touch(dk);render();const lb=main.querySelector('[data-act="lock"]');if(lb)lb.focus({preventScroll:true});return}
   if(lg.locked)return;
