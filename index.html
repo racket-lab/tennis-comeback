@@ -149,6 +149,10 @@ main{padding-block:18px 110px;display:flex;flex-direction:column;gap:16px}
 .set input,.mins input{width:3.4em;min-height:36px;border:1px solid var(--line);border-radius:8px;background:var(--surface);padding:4px 6px;text-align:center;font-size:16px;font-variant-numeric:tabular-nums}
 .set input:focus,.mins input:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 2px var(--accent-soft)}
 .set .u{font-size:12px;color:var(--muted)}
+.setctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:13px}
+.sbtn{min-height:36px;padding:4px 12px;border-radius:9px;border:1px solid var(--line);background:var(--surface);font-weight:600;font-size:13px}
+.sbtn:hover:not(:disabled){border-color:var(--muted)}
+.sbtn:disabled{opacity:.4;cursor:default}
 .ilist{list-style:none;margin:0;padding:0 0 8px;display:flex;flex-direction:column}
 .ilist li{padding:10px 0;border-top:1px solid var(--line)}
 .ilist .cue{margin-top:2px}
@@ -201,6 +205,17 @@ label.tl{font-weight:600;font-size:15px;display:block;margin-bottom:6px}
 .chart .pt{fill:var(--surface);stroke:var(--accent);stroke-width:2}
 .chart .pt.end{fill:var(--accent)}
 .chart .lbl{fill:var(--ink);font-size:12px;font-weight:700;font-family:var(--f-body)}
+.chart .bar{fill:var(--accent);opacity:.35}.chart .bar.cur{opacity:1}
+.ftabs{display:flex;flex-wrap:wrap;gap:6px}
+.ftab{min-height:36px;padding:4px 12px;border-radius:999px;border:1px dashed var(--line);background:var(--surface);font-size:13px;font-weight:600;color:var(--muted)}
+.ftab.has{border-style:solid;color:var(--ink)}
+.ftab[aria-pressed="true"]{background:var(--ink);color:var(--bg);border:1px solid var(--ink)}
+.fhead{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline}.fhead b{font-family:var(--f-display);font-size:17px}.fhead .muted{font-size:13px}
+.fxlist{display:flex;flex-direction:column;gap:12px}
+.fx{border-top:1px solid var(--line);padding-top:12px;display:flex;flex-direction:column;gap:6px}
+.fxh{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:baseline}.fxh .muted{font-size:13px}
+.fxs{font-size:14px;color:var(--muted)}.fxs b{color:var(--ink)}
+.fx details summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--accent);min-height:32px;display:flex;align-items:center}
 .chart .lim{stroke:var(--bad);stroke-width:1.5;stroke-dasharray:5 4}
 .chart .liml{fill:var(--bad);font-size:11px;font-weight:600;font-family:var(--f-body)}
 select{min-height:44px;border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:6px 10px;max-width:100%;font-size:16px}
@@ -505,18 +520,17 @@ function lastFor(id,beforeKey){const i=DMAP[beforeKey].idx;for(let j=i-1;j>=0;j-
 function seriesFor(id,metric){const e=EX[id];const out=[];
   DAYS.forEach(d=>{const lg=LOGS[d.key];if(!lg||!lg.ex)return;
     for(const k in lg.ex){if(baseId(k)!==id)continue;const x=lg.ex[k];
-      if(e.t==='m'){const v=numv(x.min);if(v>0)out.push({key:d.key,v,txt:v+' min'});continue}
+      if(e.t==='m'){const v=numv(x.min);if(v>0)out.push({key:d.key,v,n:1,txt:v+' min'});continue}
       const sets=(x.sets||[]).filter(s=>s&&numv(s[mainF(e.t)])>0);if(!sets.length)continue;
       const txt=sets.map(s=>setTxt(e.t,s)).join(' · ');
       if(e.t==='h'){const reps=sets.reduce((a,s)=>a+numv(s.r),0);const secs=sets.reduce((a,s)=>a+numv(s.r)*(numv(s.s)||0),0);
-        out.push({key:d.key,v:metric==='s'?secs:reps,reps,secs,txt})}
-      else if(e.t==='t'){out.push({key:d.key,v:Math.max(...sets.map(s=>numv(s.s))),txt})}
-      else if(e.t==='r'){out.push({key:d.key,v:sets.reduce((a,s)=>a+numv(s.r),0),txt})}
+        out.push({key:d.key,v:metric==='s'?secs:reps,n:sets.length,reps,secs,txt})}
+      else if(e.t==='t'){out.push({key:d.key,v:Math.max(...sets.map(s=>numv(s.s))),n:sets.length,txt})}
+      else if(e.t==='r'){out.push({key:d.key,v:sets.reduce((a,s)=>a+numv(s.r),0),n:sets.length,txt})}
       else{const kgs=sets.map(s=>numv(s.kg)||0);const mx=Math.max(...kgs);
         const best=mx>0?sets[kgs.indexOf(mx)]:sets.reduce((a,b)=>numv(b.r)>numv(a.r)?b:a);
-        out.push({key:d.key,v:mx>0?mx:numv(best.r),bw:!(mx>0),txt})}}});
+        out.push({key:d.key,v:mx>0?mx:numv(best.r),bw:!(mx>0),n:sets.length,txt})}}});
   return out}
-function trackable(){return Object.keys(EX).filter(id=>EX[id].t!=='c'&&seriesFor(id).length)}
 function painZone(v){return v<=3?'g':(v<=6?'y':'r')}
 
 /* ---------- Icons ---------- */
@@ -607,13 +621,14 @@ function calendar(sel){const tk=todayKey();
   </section>`}
 
 function exHTML(dk,it){const e=EX[it.id];const lg=getLog(dk).ex[it.k]||{};const done=exDone(e,lg);let body='';
-  if(hasSets(e.t)){const n=setsCount(it);const sets=lg.sets||[];const last=lastFor(it.id,dk);const tg=it.tg||{};
+  if(hasSets(e.t)){const plan=setsCount(it);const n=lg.n||plan;const sets=lg.sets||[];const last=lastFor(it.id,dk);const tg=it.tg||{};
     const lab={kg:'Gewicht in kg',r:'Wiederholungen',s:'Sekunden gehalten'};
     body=`<div class="sets">`+Array.from({length:n},(_,i)=>{const s=sets[i]||{};const ph=last&&last.sets[i]||{};
-      const target={r:tg.r?tg.r[i]:'',s:Array.isArray(tg.s)?tg.s[i]:(tg.s!=null?tg.s:''),kg:''};
+      const j=Math.min(i,plan-1);const target={r:tg.r?tg.r[j]:'',s:Array.isArray(tg.s)?tg.s[j]:(tg.s!=null?tg.s:''),kg:''};
       return `<div class="set"><span class="sn" aria-hidden="true">${i+1}</span>`+FIELDS[e.t].map(([f,u])=>{
         const pv=target[f]!==''&&target[f]!=null?target[f]:(ph[f]!=null?ph[f]:'');
         return `<input inputmode="${f==='kg'?'decimal':'numeric'}" autocomplete="off" id="in-${dk}-${it.k}-${i}-${f}" data-k="${it.k}" data-i="${i}" data-f="${f}" value="${esc(s[f])}" placeholder="${esc(pv)}" aria-label="${esc(e.n)}, Satz ${i+1}, ${lab[f]}"><span class="u">${u}</span>`}).join('')+`</div>`}).join('')+`</div>`;
+    body+=`<div class="setctl"><button class="sbtn" data-act="addset" data-k="${it.k}" ${n>=10?'disabled':''} aria-label="${esc(e.n)}: Satz hinzufügen">+ Satz</button><button class="sbtn" data-act="delset" data-k="${it.k}" ${n<=1?'disabled':''} aria-label="${esc(e.n)}: letzten Satz entfernen">− Satz</button>${n!==plan?`<span class="muted">${n} statt ${plan} Sätze</span>`:''}</div>`;
     if(last){const txt=last.sets.filter(setFilled).map(s=>setTxt(e.t,s)).join(' · ');
       body+=`<div class="lastrow"><span>Zuletzt ${short(last.key)}: <span class="num">${esc(txt)}</span></span>${sets.some(setFilled)?'':`<button class="linkbtn" data-act="copy" data-k="${it.k}" data-id="${it.id}">Werte übernehmen</button>`}</div>`}}
   else if(e.t==='m'){body=`<label class="mins"><input inputmode="numeric" autocomplete="off" id="in-${dk}-${it.k}-min" data-k="${it.k}" data-f="min" value="${esc(lg.min)}" placeholder="0" aria-label="${esc(e.n)}, Minuten"> Minuten insgesamt</label>`}
@@ -634,7 +649,29 @@ function viewPlan(){const tk=todayKey();
     </section>`}).join('')}
 
 /* ---------- Ansicht: Fortschritt ---------- */
-let selEx=null,selMetric='r';
+let selFocus=null,selMetric='perf';
+const FOCUS=[
+  {id:'front',n:'Rumpf vorne',d:'Stabilität gegen Hohlkreuz',ex:['curlup']},
+  {id:'side',n:'Rumpf seitlich',d:'Seitliche Bauchmuskeln, beim Copenhagen auch Adduktoren',ex:['sideplank','sideplankrot','copenhagen']},
+  {id:'rot',n:'Rotation & Anti-Rotation',d:'Rumpf hält gegen Drehung oder dreht aus der Hüfte',ex:['pallof','birddog','aroundworld','bandrot']},
+  {id:'post',n:'Gesäß & Rückenstrecker',d:'Hüftstreckung, Rückseite',ex:['glutebridge','back45']},
+  {id:'legs',n:'Beine',d:'Oberschenkel und Po',ex:['bulgarian']},
+  {id:'chest',n:'Brust',d:'Drücken',ex:['brustpresse','khbank']},
+  {id:'back',n:'Rücken',d:'Ziehen',ex:['latzug','rudernbrust']},
+  {id:'shoulder',n:'Schulter & Rotatoren',d:'Rotatorenmanschette',ex:['rotseit','rothip']},
+  {id:'endu',n:'Ausdauer & Tennis',d:'Laufen, Athletik, Tennis',ex:['walkjog','run','einlaufen','minitennis','tennis']}];
+function perfInfo(e,s){const bw=e.t==='w'&&s.every(p=>p.bw);
+  if(e.t==='m')return{u:'min',d:'Minuten'};if(e.t==='t')return{u:'s',d:'Längster Satz'};
+  if(e.t==='h'||e.t==='r')return{u:'Wdh',d:'Wiederholungen gesamt'};
+  return bw?{u:'Wdh',d:'Beste Wiederholungen, ohne Gewicht'}:{u:'kg',d:'Schwerster Satz'}}
+function barChart(rows,unit,aria){const W=640,H=180,L=38,R=12,T=22,Bt=28;const mx=niceMax(Math.max(1,...rows.map(r=>r.v)));
+  const bw=(W-L-R)/rows.length;const y=v=>T+(H-T-Bt)*(1-v/mx);let g='';
+  for(let i=0;i<=4;i++){const v=mx/4*i;const yy=y(v);g+=`<line class="grid" x1="${L}" x2="${W-R}" y1="${yy}" y2="${yy}"/><text class="ax" x="${L-8}" y="${yy+4}" text-anchor="end">${+v.toFixed(1)}</text>`}
+  rows.forEach((r,i)=>{const x=L+i*bw+bw*.18,w=bw*.64,yy=y(r.v);
+    g+=`<rect class="bar${r.cur?' cur':''}" x="${x}" y="${yy}" width="${w}" height="${Math.max(0,y(0)-yy)}" rx="4"><title>${esc(r.l)}: ${r.v} ${unit}</title></rect>`;
+    if(r.v>0)g+=`<text class="lbl" x="${x+w/2}" y="${yy-6}" text-anchor="middle">${r.v}</text>`;
+    g+=`<text class="ax" x="${x+w/2}" y="${H-8}" text-anchor="middle">${esc(r.l)}</text>`});
+  return `<div class="chartbox"><svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(aria)}">${g}</svg></div>`}
 function niceMax(v){if(!(v>0))return 10;const p=Math.pow(10,Math.floor(Math.log10(v)));for(const m of [1,1.5,2,2.5,3,4,5,6,8,10])if(m*p>=v*1.12)return m*p;return 10*p}
 function chart(pts,o){o=o||{};const W=640,H=220,L=38,R=22,T=20,Bt=30;
   const yMax=o.yMax!=null?o.yMax:niceMax(Math.max(...pts.map(p=>p.v)));const yMin=0;
@@ -662,21 +699,35 @@ function viewProgress(){const tk=todayKey();
   // Schmerz
   const pp=DAYS.filter(d=>getLog(d.key).pain!=null).map(d=>({key:d.key,v:getLog(d.key).pain,txt:getLog(d.key).pain+'/10'}));
   const painCard=`<section class="card pad sec"><h2>Schmerzverlauf</h2>${pp.length?chart(pp,{yMax:10,limit:3,aria:'Schmerz pro Tag, Skala 0 bis 10',fmt:p=>p.v+'/10'}):'<div class="empty">Noch keine Werte. Trag auf der Tagesseite deinen Schmerz von 0 bis 10 ein.</div>'}</section>`;
-  // Übungen
-  const tr=trackable();if(!selEx||!tr.includes(selEx))selEx=tr.includes('bulgarian')?'bulgarian':tr[0]||null;
-  let exCard;
-  if(!tr.length)exCard=`<section class="card pad sec"><h2>Übungen</h2><div class="empty">Noch keine Übungen eingetragen. Trag beim Training pro Satz Wiederholungen, Sekunden oder Gewicht ein, dann siehst du hier deine Steigerung.</div></section>`;
-  else{const e=EX[selEx];const s=seriesFor(selEx,selMetric);const bw=e.t==='w'&&s.every(p=>p.bw);
-    const unit=e.t==='m'?'min':e.t==='t'?'s':e.t==='h'?(selMetric==='s'?'s':'Wdh'):e.t==='r'?'Wdh':bw?'Wdh':'kg';
-    const desc=e.t==='m'?'Minuten pro Einheit':e.t==='t'?'Längster Satz pro Einheit in Sekunden':e.t==='h'?(selMetric==='s'?'Haltezeit gesamt pro Einheit (Wdh × Sekunden, alle Sätze)':'Wiederholungen gesamt pro Einheit (alle Sätze)'):e.t==='r'?'Wiederholungen gesamt pro Einheit':bw?'Beste Wiederholungen pro Einheit (ohne Gewicht)':'Schwerster Satz pro Einheit in kg';
-    const opts=tr.map(id=>`<option value="${id}"${id===selEx?' selected':''}>${esc(EX[id].n)}</option>`).join('');
-    const first=s[0],lastp=s[s.length-1];const diff=s.length>1?lastp.v-first.v:0;
-    const toggle=e.t==='h'?`<div class="yn" role="group" aria-label="Kennzahl"><button data-act="metric" data-v="r" aria-pressed="${selMetric==='r'}">Wiederholungen</button><button data-act="metric" data-v="s" aria-pressed="${selMetric==='s'}">Haltezeit</button></div>`:'';
-    exCard=`<section class="card pad sec"><h2>Übungen</h2>
-      <label class="tl" for="exsel" style="margin:0">Übung</label><select id="exsel" data-f="exsel">${opts}</select>${toggle}
-      <div class="muted" style="font-size:14px">${desc}${s.length>1?` · seit ${short(first.key)} <b style="color:var(--ink)">${diff>=0?'+':''}${+diff.toFixed(1)} ${unit}</b>`:''}</div>
-      ${chart(s,{aria:e.n+' Verlauf in '+unit,fmt:p=>p.v+' '+unit})}
-      <table class="hist"><tbody>${s.slice().reverse().map(p=>`<tr><td>${short(p.key)}</td><td>${esc(p.txt)}</td></tr>`).join('')}</tbody></table></section>`}
+  // Fortschritt nach Trainingsfokus
+  const has=f=>f.ex.some(id=>seriesFor(id,'r').length);
+  if(!selFocus)selFocus=(FOCUS.find(has)||FOCUS[0]).id;
+  const F=FOCUS.find(f=>f.id===selFocus)||FOCUS[0];
+  const tabs=`<div class="ftabs" role="group" aria-label="Trainingsfokus">${FOCUS.map(f=>`<button class="ftab${has(f)?' has':''}" data-act="focus" data-v="${f.id}" aria-pressed="${f.id===F.id}">${esc(f.n)}</button>`).join('')}</div>`;
+  const isEndu=F.id==='endu';
+  const curW=(DMAP[tk]||DAYS[0]).week;
+  const weekRows=[1,2,3,4,5].map(wn=>{let v=0;DAYS.filter(d=>d.week===wn||(wn===5&&d.week===6)).forEach(d=>{const lg=LOGS[d.key];if(!lg||!lg.ex)return;
+      for(const k in lg.ex){const id=baseId(k);if(!F.ex.includes(id))continue;const e=EX[id];const x=lg.ex[k];
+        if(e.t==='m')v+=numv(x.min)||0;else v+=(x.sets||[]).filter(q=>q&&numv(q[mainF(e.t)])>0).length}});
+    return{l:'Woche '+wn,v,cur:wn===Math.min(curW,5)}});
+  const exCards=F.ex.map(id=>{const e=EX[id];const s=seriesFor(id,'r');
+    if(!s.length)return `<div class="fx"><div class="fxh"><b>${esc(e.n)}</b><span class="muted">noch keine Einträge</span></div></div>`;
+    const pi=perfInfo(e,s);const useSets=selMetric==='sets'&&e.t!=='m';
+    const pts=s.map(p=>useSets?Object.assign({},p,{v:p.n}):p);const unit=useSets?'Sätze':pi.u;
+    const f0=s[0],fl=s[s.length-1];const dv=s.length>1?+(fl.v-f0.v).toFixed(1):0;const dn=s.length>1?fl.n-f0.n:0;
+    const sum=[`${pi.d}: <b>${fl.v} ${pi.u}</b>${s.length>1?` (${dv>=0?'+':''}${dv} seit ${short(f0.key)})`:''}`];
+    if(e.t!=='m')sum.push(`Sätze: <b>${fl.n}</b>${dn!==0?` (${dn>0?'+':''}${dn})`:''}`);
+    return `<div class="fx"><div class="fxh"><b>${esc(e.n)}</b><span class="muted num">${s.length} ${s.length===1?'Einheit':'Einheiten'}</span></div>
+      <div class="fxs">${sum.join(' · ')}</div>
+      ${chart(pts,{aria:e.n+' Verlauf in '+unit,fmt:p=>p.v+' '+unit})}
+      <details><summary>Alle Einträge</summary><table class="hist"><tbody>${s.slice().reverse().map(p=>`<tr><td>${short(p.key)}</td><td>${e.t==='m'?'':p.n+' Sätze: '}${esc(p.txt)}</td></tr>`).join('')}</tbody></table></details></div>`}).join('');
+  const toggle=isEndu?'':`<div class="yn" role="group" aria-label="Kennzahl pro Übung"><button data-act="metric" data-v="perf" aria-pressed="${selMetric!=='sets'}">Leistung</button><button data-act="metric" data-v="sets" aria-pressed="${selMetric==='sets'}">Sätze</button></div>`;
+  const exCard=`<section class="card pad sec"><h2>Fortschritt nach Trainingsfokus</h2>${tabs}
+    <div class="fhead"><b>${esc(F.n)}</b><span class="muted">${esc(F.d)}</span></div>
+    <div class="muted" style="font-size:14px">${isEndu?'Minuten pro Woche, alle Einheiten zusammen.':'Sätze pro Woche, alle Übungen dieses Fokus zusammen. So bleibt der Vergleich fair, auch wenn die Übung wechselt.'}</div>
+    ${weekRows.some(r=>r.v>0)?barChart(weekRows,isEndu?'min':'Sätze',F.n+' pro Woche'):'<div class="empty">Noch keine Einträge in diesem Fokus. Sobald du Sätze einträgst, siehst du hier deine Wochen.</div>'}
+    ${toggle}
+    <div class="fxlist">${exCards}</div></section>`;
   return `<div class="dhead"><div class="eyebrow">Bis heute</div><h1>Fortschritt</h1></div>${tiles}${calCard}${painCard}${exCard}`}
 
 /* ---------- Ansicht: Regeln ---------- */
@@ -726,11 +777,15 @@ function refreshEx(dk,k){const el=main.querySelector(`.ex[data-ex="${CSS.escape(
 main.addEventListener('click',ev=>{const b=ev.target.closest('[data-act]');if(!b||b.disabled)return;const a=b.dataset.act;
   if(a==='goto'){if(b.dataset.day)go('tag-'+b.dataset.day);return}
   if(a==='metric'){selMetric=b.dataset.v;render();return}
+  if(a==='focus'){selFocus=b.dataset.v;render();return}
   const dk=curDay();if(!dk)return;const lg=ensureLog(dk);
   if(a==='status'){lg.status=lg.status===b.dataset.v?null:b.dataset.v;touch(dk);render()}
   else if(a==='pain'){const v=+b.dataset.v;lg.pain=lg.pain===v?null:v;touch(dk);render()}
   else if(a==='toggle'){const k=b.dataset.k;const it=DMAP[dk].items.flat().find(x=>x.k===k);const x=lg.ex[k]||(lg.ex[k]={});x.done=!exDone(EX[it.id],x);touch(dk);refreshEx(dk,k)}
-  else if(a==='copy'){const k=b.dataset.k;const last=lastFor(b.dataset.id,dk);if(!last)return;const x=lg.ex[k]||(lg.ex[k]={});x.sets=last.sets.map(s=>Object.assign({},s||{}));touch(dk);render()}
+  else if(a==='addset'||a==='delset'){const k=b.dataset.k;const it=DMAP[dk].items.flat().find(x=>x.k===k);const x=lg.ex[k]||(lg.ex[k]={});const cur=x.n||setsCount(it);
+    x.n=a==='addset'?Math.min(10,cur+1):Math.max(1,cur-1);if(x.sets)x.sets=x.sets.slice(0,x.n);if(x.n===setsCount(it))delete x.n;touch(dk);render();
+    const nb=main.querySelector(`[data-act="${a}"][data-k="${CSS.escape(k)}"]`);if(nb&&!nb.disabled)nb.focus({preventScroll:true})}
+  else if(a==='copy'){const k=b.dataset.k;const last=lastFor(b.dataset.id,dk);if(!last)return;const x=lg.ex[k]||(lg.ex[k]={});x.sets=last.sets.map(s=>Object.assign({},s||{}));const it=DMAP[dk].items.flat().find(q=>q.k===k);if(x.sets.length!==setsCount(it))x.n=x.sets.length;else delete x.n;touch(dk);render()}
 });
 main.addEventListener('input',ev=>{const t=ev.target;const f=t.dataset&&t.dataset.f;if(!f||f==='exsel')return;const dk=curDay();if(!dk)return;const lg=ensureLog(dk);
   if(f==='note'){lg.note=t.value.slice(0,4000);touch(dk);return}
@@ -738,7 +793,6 @@ main.addEventListener('input',ev=>{const t=ev.target;const f=t.dataset&&t.datase
   if(f==='min'){x.min=t.value.replace(/[^\d.,]/g,'').slice(0,5)}
   else{x.sets=x.sets||[];const i=+t.dataset.i;x.sets[i]=x.sets[i]||{};x.sets[i][f]=t.value.replace(/[^\d.,]/g,'').slice(0,6);for(let j=0;j<x.sets.length;j++)if(!x.sets[j])x.sets[j]={}}
   touch(dk);refreshEx(dk,k)});
-main.addEventListener('change',ev=>{if(ev.target.id==='exsel'){selEx=ev.target.value;render();const s=document.getElementById('exsel');if(s)s.focus()}});
 
 render();
 initDb();
